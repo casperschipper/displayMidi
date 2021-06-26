@@ -1,4 +1,36 @@
-module Main exposing (ColoredChar(..), Config(..), Evt(..), Line(..), MidiEvent(..), Model(..), Msg(..), Pitch(..), Screen(..), Time(..), Velo(..), asHtml, decodeCsv, decoder, displayEvts, displayLines, fromData, init, lineToHtml, main, midiEventToString, noteToLine, numberToDigits, subscriptions, toString, update, veloToColor, view, white, whiteLine, withColor)
+module Main exposing
+    ( ColoredChar(..)
+    , Config(..)
+    , Evt(..)
+    , Line(..)
+    , MidiEvent(..)
+    , Model(..)
+    , Msg(..)
+    , Pitch(..)
+    , Screen(..)
+    , Time(..)
+    , Velo(..)
+    , asHtml
+    , decodeCsv
+    , decoder
+    , displayEvts
+    , displayLines
+    , fromData
+    , init
+    , lineToHtml
+    , main
+    , midiEventToString
+    , noteToLine
+    , numberToDigits
+    , subscriptions
+    , toString
+    , update
+    , veloToColor
+    , view
+    , white
+    , whiteLine
+    , withColor
+    )
 
 import Browser
 import Color exposing (Color, rgba)
@@ -83,13 +115,13 @@ white =
 
 whiteLine : Config -> Line
 whiteLine (Config w) =
-    List.repeat w white
+    List.repeat w white |> Line
 
 
 displayEvts : Config -> List Evt -> List Line
-displayEvts (Config w) evts =
+displayEvts cfg evts =
     let
-        isNow now (Evt t _) =
+        isNow now (Evt (Time t) _) =
             now >= t
 
         getMidiEvt (Evt _ e) =
@@ -97,19 +129,22 @@ displayEvts (Config w) evts =
 
         fold t ( result, tail ) =
             case tail of
+                [] ->
+                    ( result, [] )
+
                 x :: xs ->
                     if isNow t x then
                         let
                             line =
-                                getMidiEvt x |> noteToLine
+                                getMidiEvt x |> noteToLine cfg
                         in
                         ( line :: result, xs )
 
                     else
-                        ( whiteLine :: result, tail )
+                        ( whiteLine cfg :: result, tail )
 
         clock =
-            List.range 0 400
+            List.range 0 5000 |> List.map (\x -> x * 10)
     in
     List.foldr fold ( [], evts ) clock |> Tuple.first
 
@@ -125,20 +160,26 @@ noteToLine (Config w) note =
                 trailing =
                     w - List.length noteChars - p
             in
-            List.repeat p white ++ noteChars ++ List.repeat trailing white
+            List.repeat p white ++ noteChars ++ List.repeat trailing white |> Line
 
-        NoteOff (Pitch p) (Velo v) ->
-            "noteOff" |> String.toList |> Line
+        NoteOff (Pitch p) velo ->
+            let
+                noteChars =
+                    numberToDigits p |> withColor (veloToColor velo)
+
+                trailing =
+                    w - List.length noteChars - p
+            in
+            List.repeat p white ++ noteChars ++ List.repeat trailing white |> Line
 
         Ignore ->
-            List.repeat w ' ' |> Line
+            whiteLine (Config w)
 
 
 displayLines : List Line -> Html Msg
 displayLines lines =
     lines
         |> List.map lineToHtml
-        |> LE.transpose
         |> LE.intercalate [ br [] [] ]
         |> div []
 
@@ -271,7 +312,7 @@ update msg model =
                         m =
                             case decodeCsv str of
                                 Ok lst ->
-                                    Parsed (lst |> displayEvts (Config 128) |> displayLines)
+                                    Parsed (lst |> displayEvts (Config 255) |> displayLines)
 
                                 Err err ->
                                     CSVError <| Decode.errorToString err
