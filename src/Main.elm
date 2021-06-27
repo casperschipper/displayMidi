@@ -75,6 +75,10 @@ type Evt
     = Evt Time MidiEvent
 
 
+getMidiEvt (Evt _ e) =
+    e
+
+
 type ColoredChar
     = ColoredChar (Maybe Color) Char
 
@@ -110,7 +114,7 @@ numberToDigits x =
 
 
 white =
-    ColoredChar Nothing ' '
+    ColoredChar Nothing '_'
 
 
 whiteLine : Config -> Line
@@ -118,14 +122,16 @@ whiteLine (Config w) =
     List.repeat w white |> Line
 
 
+displayEvtsWithoutTime : Config -> List Evt -> List Line
+displayEvtsWithoutTime cfg evts =
+    evts |> List.map (getMidiEvt >> noteToLine cfg)
+
+
 displayEvts : Config -> List Evt -> List Line
 displayEvts cfg evts =
     let
         isNow now (Evt (Time t) _) =
             now >= t
-
-        getMidiEvt (Evt _ e) =
-            e
 
         fold t ( result, tail ) =
             case tail of
@@ -180,6 +186,7 @@ displayLines : List Line -> Html Msg
 displayLines lines =
     lines
         |> List.map lineToHtml
+        |> LE.transpose
         |> LE.intercalate [ br [] [] ]
         |> div []
 
@@ -312,7 +319,7 @@ update msg model =
                         m =
                             case decodeCsv str of
                                 Ok lst ->
-                                    Parsed (lst |> displayEvts (Config 255) |> displayLines)
+                                    Parsed (lst |> List.take 100 |> displayEvtsWithoutTime (Config 255) |> displayLines)
 
                                 Err err ->
                                     CSVError <| Decode.errorToString err
