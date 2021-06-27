@@ -114,7 +114,7 @@ numberToDigits x =
 
 
 white =
-    ColoredChar Nothing '_'
+    ColoredChar Nothing ' '
 
 
 whiteLine : Config -> Line
@@ -164,9 +164,9 @@ noteToLine (Config w) note =
                     numberToDigits p |> withColor (veloToColor velo)
 
                 trailing =
-                    w - List.length noteChars - p
+                    w - List.length noteChars - (p - 40)
             in
-            List.repeat p white ++ noteChars ++ List.repeat trailing white |> Line
+            List.repeat (p - 40) white ++ noteChars ++ List.repeat trailing white |> Line
 
         NoteOff (Pitch p) velo ->
             let
@@ -319,7 +319,7 @@ update msg model =
                         m =
                             case decodeCsv str of
                                 Ok lst ->
-                                    Parsed (lst |> List.take 100 |> displayEvtsWithoutTime (Config 255) |> displayLines)
+                                    Parsed (lst |> List.take 300 |> displayEvtsWithoutTime (Config 50) |> displayLines)
 
                                 Err err ->
                                     CSVError <| Decode.errorToString err
@@ -352,6 +352,6 @@ view model =
             text s
 
         Parsed html ->
-            div [ style "font-family" "monospace" ]
+            pre [ style "font-family" "monospace", style "font-size" "0.5em" ]
                 [ html
                 ]
