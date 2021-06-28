@@ -1,6 +1,6 @@
 module Main exposing
-    ( ColoredChar(..)
-    , Config(..)
+    ( Config(..)
+    , DisplayChar(..)
     , Evt(..)
     , Line(..)
     , MidiEvent(..)
@@ -39,18 +39,22 @@ import Html exposing (Html, br, div, p, pre, span, text)
 import Html.Attributes as Attr exposing (style)
 import Http
 import List.Extra as LE
+import Random exposing (Generator)
+import Random.Char
+import Random.Extra as RX
 
 
 type Model
     = Loading
     | Loaded String
-    | Parsed (Html Msg)
+    | Generated (Html Msg)
     | Failed Http.Error
     | CSVError String
 
 
 type Msg
     = GotMidiCSV (Result Http.Error String)
+    | GotRandomized (Html Msg)
 
 
 type Pitch
@@ -79,12 +83,13 @@ getMidiEvt (Evt _ e) =
     e
 
 
-type ColoredChar
-    = ColoredChar (Maybe Color) Char
+type DisplayChar
+    = ColoredChar Color Char
+    | FillerChar
 
 
 type Line
-    = Line (List ColoredChar)
+    = Line (List DisplayChar)
 
 
 type Screen
@@ -113,8 +118,23 @@ numberToDigits x =
     aux x |> List.reverse |> List.map (\d -> d + 48 |> Char.fromCode)
 
 
+randomColoredAndChar : Generator ( Color, Char )
+randomColoredAndChar =
+    let
+        randChar =
+            Random.Char.lowerCaseLatin
+
+        rflt =
+            Random.float 0.97 1.0
+
+        randColor =
+            rflt |> Random.map (\f -> Color.rgba f f f f)
+    in
+    Random.map2 Tuple.pair randColor randChar
+
+
 white =
-    ColoredChar Nothing ' '
+    FillerChar
 
 
 whiteLine : Config -> Line
@@ -182,13 +202,16 @@ noteToLine (Config w) note =
             whiteLine (Config w)
 
 
-displayLines : List Line -> Html Msg
+displayLines : List Line -> Generator (Html Msg)
 displayLines lines =
     lines
         |> List.map lineToHtml
-        |> LE.transpose
-        |> LE.intercalate [ br [] [] ]
-        |> div []
+        |> RX.sequence
+        |> Random.map
+            (LE.transpose
+                >> LE.intercalate [ br [] [] ]
+                >> div []
+            )
 
 
 veloToColor : Velo -> Color
@@ -200,24 +223,35 @@ veloToColor (Velo v) =
     Color.rgba flt flt flt 1.0
 
 
-withColor : Color -> List Char -> List ColoredChar
+withColor : Color -> List Char -> List DisplayChar
 withColor c =
-    List.map (\char -> ColoredChar (Just c) char)
+    List.map (\char -> ColoredChar c char)
 
 
-lineToHtml : Line -> List (Html Msg)
+lineToHtml : Line -> Generator (List (Html Msg))
 lineToHtml (Line lst) =
-    lst |> List.map asHtml
+    lst |> List.map asHtml |> RX.sequence
 
 
-asHtml : ColoredChar -> Html Msg
-asHtml (ColoredChar color char) =
-    case color of
-        Nothing ->
-            text (String.fromChar char)
+asHtml : DisplayChar -> Generator (Html Msg)
+asHtml dchar =
+    let
+        render color char =
+            span
+                [ style "color" (Color.toCssString color)
+                ]
+                [ text (String.fromChar char) ]
+    in
+    case dchar of
+        FillerChar ->
+            randomColoredAndChar
+                |> Random.map
+                    (\( clr, chr ) ->
+                        render clr chr
+                    )
 
-        Just clr ->
-            span [ style "color" (Color.toCssString clr) ] [ text (String.fromChar char) ]
+        ColoredChar color char ->
+            Random.constant <| render color char
 
 
 toString : Evt -> String
@@ -312,22 +346,22 @@ update msg model =
         GotMidiCSV res ->
             case res of
                 Ok str ->
-                    let
-                        _ =
-                            Debug.log "str" str
+                    case decodeCsv str of
+                        Ok lst ->
+                            let
+                                gen =
+                                    lst |> List.take 300 |> displayEvtsWithoutTime (Config 50) |> displayLines
+                            in
+                            ( model, Random.generate GotRandomized gen )
 
-                        m =
-                            case decodeCsv str of
-                                Ok lst ->
-                                    Parsed (lst |> List.take 300 |> displayEvtsWithoutTime (Config 50) |> displayLines)
-
-                                Err err ->
-                                    CSVError <| Decode.errorToString err
-                    in
-                    ( m, Cmd.none )
+                        Err err ->
+                            ( CSVError <| Decode.errorToString err, Cmd.none )
 
                 Err e ->
                     ( Failed e, Cmd.none )
+
+        GotRandomized html ->
+            ( Generated html, Cmd.none )
 
 
 view : Model -> Html Msg
@@ -351,7 +385,10 @@ view model =
         CSVError s ->
             text s
 
-        Parsed html ->
-            pre [ style "font-family" "monospace", style "font-size" "0.5em" ]
+        Generated html ->
+            pre
+                [ style "font-family" "monospace"
+                , style "font-size" "0.5em"
+                ]
                 [ html
                 ]
