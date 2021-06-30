@@ -39,22 +39,27 @@ import Html exposing (Html, br, div, p, pre, span, text)
 import Html.Attributes as Attr exposing (style)
 import Http
 import List.Extra as LE
+import Piet
 import Random exposing (Generator)
 import Random.Char
 import Random.Extra as RX
+import Random.List as RL
 
 
 type Model
     = Loading
     | Loaded String
-    | Generated (Html Msg)
+    | Generated ( Html Msg, Maybe (Html Msg) )
     | Failed Http.Error
+    | WrongOrder
     | CSVError String
 
 
 type Msg
     = GotMidiCSV (Result Http.Error String)
     | GotRandomized (Html Msg)
+    | GotRandomizedCode (Html Msg)
+    | GotCodeTxt (Result Http.Error String)
 
 
 type Pitch
@@ -86,6 +91,7 @@ getMidiEvt (Evt _ e) =
 type DisplayChar
     = ColoredChar Color Char
     | FillerChar
+    | RndColorChar Char
 
 
 type Line
@@ -118,19 +124,38 @@ numberToDigits x =
     aux x |> List.reverse |> List.map (\d -> d + 48 |> Char.fromCode)
 
 
+setTransperancy : Float -> Color -> Color
+setTransperancy t c =
+    let
+        color =
+            Color.toRgba c
+    in
+    Color.rgba color.red color.green color.blue t
+
+
 randomColoredAndChar : Generator ( Color, Char )
 randomColoredAndChar =
     let
         randChar =
-            Random.Char.lowerCaseLatin
+            generatorOfString "(12345678()[]{}+-*~          )"
 
         rflt =
-            Random.float 0.97 1.0
+            Random.float 0.95 1.0
 
         randColor =
-            rflt |> Random.map (\f -> Color.rgba f f f f)
+            Random.int 0 5 |> Random.map (Piet.wrap >> setTransperancy 0.5)
     in
     Random.map2 Tuple.pair randColor randChar
+
+
+randomColor : Generator Color
+randomColor =
+    Random.float 0.0 1.0 |> Random.map (\c -> Color.rgb c c c)
+
+
+generatorOfString : String -> Generator Char
+generatorOfString str =
+    str |> String.toList |> RL.choose |> Random.map (Tuple.first >> Maybe.withDefault ' ')
 
 
 white =
@@ -144,7 +169,7 @@ whiteLine (Config w) =
 
 displayEvtsWithoutTime : Config -> List Evt -> List Line
 displayEvtsWithoutTime cfg evts =
-    evts |> List.map (getMidiEvt >> noteToLine cfg)
+    evts |> List.indexedMap (\i v -> v |> getMidiEvt |> noteToLine cfg i)
 
 
 displayEvts : Config -> List Evt -> List Line
@@ -162,7 +187,7 @@ displayEvts cfg evts =
                     if isNow t x then
                         let
                             line =
-                                getMidiEvt x |> noteToLine cfg
+                                getMidiEvt x |> noteToLine cfg 0
                         in
                         ( line :: result, xs )
 
@@ -175,23 +200,27 @@ displayEvts cfg evts =
     List.foldr fold ( [], evts ) clock |> Tuple.first
 
 
-noteToLine : Config -> MidiEvent -> Line
-noteToLine (Config w) note =
+offset =
+    35
+
+
+noteToLine : Config -> Int -> MidiEvent -> Line
+noteToLine (Config w) index note =
     case note of
         NoteOn (Pitch p) velo ->
             let
                 noteChars =
-                    numberToDigits p |> withColor (veloToColor velo)
+                    numberToDigits p |> withColor (Piet.wrap (index * 3))
 
                 trailing =
-                    w - List.length noteChars - (p - 40)
+                    w - List.length noteChars - (p - offset)
             in
-            List.repeat (p - 40) white ++ noteChars ++ List.repeat trailing white |> Line
+            List.repeat (p - offset) white ++ noteChars ++ List.repeat trailing white |> Line
 
         NoteOff (Pitch p) velo ->
             let
                 noteChars =
-                    numberToDigits p |> withColor (veloToColor velo)
+                    numberToDigits p |> withColor (Piet.wrap (index * 3))
 
                 trailing =
                     w - List.length noteChars - p
@@ -214,13 +243,21 @@ displayLines lines =
             )
 
 
+displayCodeLines : List Line -> Generator (Html Msg)
+displayCodeLines lines =
+    lines
+        |> List.map lineToHtml
+        |> RX.sequence
+        |> Random.map (LE.intercalate [ br [] [] ] >> div [])
+
+
 veloToColor : Velo -> Color
 veloToColor (Velo v) =
     let
         flt =
             toFloat v / 128.0
     in
-    Color.rgba flt flt flt 1.0
+    Piet.pick flt
 
 
 withColor : Color -> List Char -> List DisplayChar
@@ -236,22 +273,25 @@ lineToHtml (Line lst) =
 asHtml : DisplayChar -> Generator (Html Msg)
 asHtml dchar =
     let
-        render color char =
+        render color char bg =
             span
                 [ style "color" (Color.toCssString color)
+                , style "background-color" (Color.toCssString bg)
                 ]
                 [ text (String.fromChar char) ]
     in
     case dchar of
         FillerChar ->
-            randomColoredAndChar
-                |> Random.map
-                    (\( clr, chr ) ->
-                        render clr chr
-                    )
+            Random.constant <|
+                span
+                    []
+                    [ text " " ]
 
         ColoredChar color char ->
-            Random.constant <| render color char
+            Random.constant <| render color char color
+
+        RndColorChar char ->
+            randomColor |> Random.map (\rndColor -> render Color.white char (rndColor |> setTransperancy 0.1))
 
 
 toString : Evt -> String
@@ -332,12 +372,76 @@ subscriptions _ =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
+    let
+        cmd =
+            Http.get
+                { url = "melody-berlin-train.txt"
+                , expect = Http.expectString GotMidiCSV
+                }
+    in
     ( Loading
-    , Http.get
-        { url = "melody-berlin-train.txt"
-        , expect = Http.expectString GotMidiCSV
-        }
+    , cmd
     )
+
+
+codeHtmlGenerator : Config -> String -> Generator (Html Msg)
+codeHtmlGenerator (Config w) str =
+    let
+        unf seed =
+            case seed of
+                [] ->
+                    Nothing
+
+                lst ->
+                    Just ( List.take w lst, List.drop w lst )
+
+        chars =
+            String.toList str
+                |> List.filter (\c -> Char.isAlpha c || Char.isDigit c || List.member c (String.toList " -.,+*~()"))
+                |> List.map
+                    (\c ->
+                        case c of
+                            '\n' ->
+                                '\t'
+
+                            '*' ->
+                                '*'
+
+                            other ->
+                                if Char.isDigit other then
+                                    other
+
+                                else
+                                    '~'
+                    )
+                |> List.map RndColorChar
+
+        lines =
+            LE.unfoldr unf chars |> List.map Line
+    in
+    displayCodeLines lines
+
+
+config =
+    Config 70
+
+
+setCodeHtml : Html Msg -> ( Html Msg, Maybe (Html Msg) ) -> ( Html Msg, Maybe (Html Msg) )
+setCodeHtml codeHtml ( midi, _ ) =
+    ( midi, Just codeHtml )
+
+
+setMidiHtml : Html Msg -> ( Html Msg, Maybe (Html Msg) ) -> ( Html Msg, Maybe (Html Msg) )
+setMidiHtml midiHtml ( _, mCode ) =
+    ( midiHtml, mCode )
+
+
+getCodeCmd : Cmd Msg
+getCodeCmd =
+    Http.get
+        { url = "code.txt"
+        , expect = Http.expectString GotCodeTxt
+        }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -350,7 +454,7 @@ update msg model =
                         Ok lst ->
                             let
                                 gen =
-                                    lst |> List.take 300 |> displayEvtsWithoutTime (Config 50) |> displayLines
+                                    lst |> List.take 300 |> displayEvtsWithoutTime config |> displayLines
                             in
                             ( model, Random.generate GotRandomized gen )
 
@@ -361,7 +465,27 @@ update msg model =
                     ( Failed e, Cmd.none )
 
         GotRandomized html ->
-            ( Generated html, Cmd.none )
+            ( Generated ( html, Nothing ), getCodeCmd )
+
+        GotRandomizedCode html ->
+            case model of
+                Generated mdl ->
+                    ( Generated (setCodeHtml html mdl), Cmd.none )
+
+                _ ->
+                    ( WrongOrder, Cmd.none )
+
+        GotCodeTxt res ->
+            case res of
+                Ok txt ->
+                    let
+                        genCode =
+                            txt |> codeHtmlGenerator (Config 300)
+                    in
+                    ( model, Random.generate GotRandomizedCode genCode )
+
+                Err e ->
+                    ( Failed e, Cmd.none )
 
 
 view : Model -> Html Msg
@@ -385,10 +509,26 @@ view model =
         CSVError s ->
             text s
 
-        Generated html ->
-            pre
-                [ style "font-family" "monospace"
-                , style "font-size" "0.5em"
-                ]
-                [ html
-                ]
+        Generated ( html, mCodeHtml ) ->
+            let
+                layer fz htmlContent =
+                    pre
+                        [ style "position" "absolute"
+                        , style "top" "0"
+                        , style "left" "0"
+                        , style "font-family" "monospace"
+                        , style "font-size" fz
+                        , style "background-color" "rgba(0.0,0.0,0.0,0.0)"
+                        ]
+                        [ htmlContent
+                        ]
+            in
+            case mCodeHtml of
+                Just codeHtml ->
+                    div [] [ layer "1em" html, layer "1em" codeHtml ]
+
+                Nothing ->
+                    div [] [ layer "1em" html ]
+
+        WrongOrder ->
+            text "wrong order"
