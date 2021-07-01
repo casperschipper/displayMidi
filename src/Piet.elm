@@ -28,9 +28,13 @@ pietWhite : Color
 pietWhite =
     rgb255 182 190 199
 
+pietPurple : Color
+pietPurple =
+    rgb255 255 0 255
+
 
 allColors =
-    [ pietRed, pietYellow, pietBlue, pietYellow, pietBlack]
+    [ pietRed, pietYellow, pietBlue, pietYellow, pietBlack, pietPurple]
 
 
 pick : Float -> Color

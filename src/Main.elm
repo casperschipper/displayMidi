@@ -54,6 +54,7 @@ type Model
     | WrongOrder
     | CSVError String
 
+      
 
 type Msg
     = GotMidiCSV (Result Http.Error String)
@@ -150,7 +151,7 @@ randomColoredAndChar =
 
 randomColor : Generator Color
 randomColor =
-    Random.float 0.6 0.8 |> Random.map (\c -> Color.rgb c c c)
+    Random.float 0.1 0.5 |> Random.map (\c -> Color.rgb (c * 0.2) 0.0 (c * 2.0))
 
 
 generatorOfString : String -> Generator Char
@@ -210,7 +211,7 @@ noteToLine (Config w) index note =
         NoteOn (Pitch p) velo ->
             let
                 noteChars =
-                    numberToDigits p |> withColor (Piet.wrap (index * 3))
+                    numberToDigits p |> withColor (Piet.wrap (index * 1))
 
                 trailing =
                     w - List.length noteChars - (p - offset)
@@ -220,7 +221,7 @@ noteToLine (Config w) index note =
         NoteOff (Pitch p) velo ->
             let
                 noteChars =
-                    numberToDigits p |> withColor (Piet.wrap (index * 3))
+                    numberToDigits p |> withColor (Piet.wrap (index * 1))
 
                 trailing =
                     w - List.length noteChars - p
@@ -513,7 +514,7 @@ view model =
                         , style "left" "0"
                         , style "font-family" "monospace"
                         , style "font-size" fz
-                        , style "background-color" "rgba(0.3,0.0,1.0,0.7)"
+                        , style "background-color" "rgba(0.2,0.0,0.4,1.0)"
                         ]
                         [ htmlContent
                         ]
