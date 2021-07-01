@@ -143,14 +143,14 @@ randomColoredAndChar =
             Random.float 0.95 1.0
 
         randColor =
-            Random.int 0 5 |> Random.map (Piet.wrap >> setTransperancy 0.5)
+            Random.int 0 5 |> Random.map (Piet.wrap >> setTransperancy 0.2)
     in
     Random.map2 Tuple.pair randColor randChar
 
 
 randomColor : Generator Color
 randomColor =
-    Random.float 0.0 1.0 |> Random.map (\c -> Color.rgb c c c)
+    Random.float 0.6 0.8 |> Random.map (\c -> Color.rgb c c c)
 
 
 generatorOfString : String -> Generator Char
@@ -375,7 +375,7 @@ init _ =
     let
         cmd =
             Http.get
-                { url = "melody-berlin-train.txt"
+                { url = "17-02-2021.txt"
                 , expect = Http.expectString GotMidiCSV
                 }
     in
@@ -397,22 +397,15 @@ codeHtmlGenerator (Config w) str =
 
         chars =
             String.toList str
-                |> List.filter (\c -> Char.isAlpha c || Char.isDigit c || List.member c (String.toList " -.,+*~()"))
+                |> List.filter (\c -> List.member c (String.toList " -.,+*~()"))
                 |> List.map
                     (\c ->
                         case c of
                             '\n' ->
                                 '\t'
 
-                            '*' ->
-                                '*'
-
                             other ->
-                                if Char.isDigit other then
-                                    other
-
-                                else
-                                    '~'
+                                other
                     )
                 |> List.map RndColorChar
 
@@ -453,6 +446,8 @@ update msg model =
                     case decodeCsv str of
                         Ok lst ->
                             let
+                                _ = Debug.log "gen" lst
+                                    
                                 gen =
                                     lst |> List.take 300 |> displayEvtsWithoutTime config |> displayLines
                             in
@@ -518,7 +513,7 @@ view model =
                         , style "left" "0"
                         , style "font-family" "monospace"
                         , style "font-size" fz
-                        , style "background-color" "rgba(0.0,0.0,0.0,0.0)"
+                        , style "background-color" "rgba(0.3,0.0,1.0,0.7)"
                         ]
                         [ htmlContent
                         ]
