@@ -292,7 +292,7 @@ asHtml dchar =
             Random.constant <| render color char color
 
         RndColorChar char ->
-            randomColor |> Random.map (\rndColor -> render Color.white char (rndColor |> setTransperancy 0.1))
+            randomColor |> Random.map (\rndColor -> render Color.white char (rndColor |> setTransperancy 0.9))
 
 
 toString : Evt -> String
@@ -514,17 +514,23 @@ view model =
                         , style "left" "0"
                         , style "font-family" "monospace"
                         , style "font-size" fz
-                        , style "background-color" "rgba(0.2,0.0,0.4,1.0)"
                         ]
                         [ htmlContent
                         ]
             in
             case mCodeHtml of
                 Just codeHtml ->
-                    div [] [ layer "1em" html, layer "1em" codeHtml ]
+                    div [style "background-color" "black"] [ layer "1em" html, layer "1em" codeHtml ]
 
                 Nothing ->
                     div [] [ layer "1em" html ]
 
         WrongOrder ->
             text "wrong order"
+
+{-
+🚲
+bicycle
+Unicode: U+1F6B2, UTF-8: F0 9F 9A B2
+
+-}
