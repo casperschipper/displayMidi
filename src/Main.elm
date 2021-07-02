@@ -533,4 +533,14 @@ view model =
 bicycle
 Unicode: U+1F6B2, UTF-8: F0 9F 9A B2
 
+
+
+         
+     
+  _     ,_,        
+   \ __ / 
+ .-.\  /.-.
+( * )\/( * )
+ `-´    `-´
+
 -}
