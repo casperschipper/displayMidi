@@ -270,7 +270,20 @@ lineToHtml : Line -> Generator (List (Html Msg))
 lineToHtml (Line lst) =
     lst |> List.map asHtml |> RX.sequence
 
+shadowStyle : Char -> Html.Attribute Msg
+shadowStyle char =
+    let depth =
+            char |> Char.toCode 
 
+        px =
+            "5px"
+                
+        shadow =
+            ["#000000",px,px,String.fromFloat ((depth |> toFloat) /1000.0) ++ "px"]
+    in
+        style "box-shadow" ( String.join " " shadow)
+       
+        
 asHtml : DisplayChar -> Generator (Html Msg)
 asHtml dchar =
     let
@@ -278,6 +291,11 @@ asHtml dchar =
             span
                 [ style "color" (Color.toCssString color)
                 , style "background-color" (Color.toCssString bg)
+                , style "transform" "skew(39deg)"
+                , style "display" "inline-block"
+                , style "width" "1.5em"
+                , style "height" "1.5em"
+                , shadowStyle char
                 ]
                 [ text (String.fromChar char) ]
     in
