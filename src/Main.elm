@@ -54,7 +54,6 @@ type Model
     | WrongOrder
     | CSVError String
 
-      
 
 type Msg
     = GotMidiCSV (Result Http.Error String)
@@ -270,32 +269,41 @@ lineToHtml : Line -> Generator (List (Html Msg))
 lineToHtml (Line lst) =
     lst |> List.map asHtml |> RX.sequence
 
+
 shadowStyle : Char -> Html.Attribute Msg
 shadowStyle char =
-    let depth =
-            char |> Char.toCode 
+    let
+        depth =
+            char |> Char.toCode
 
-        px =
+        off =
             "5px"
-                
+
         shadow =
-            ["#000000",px,px,String.fromFloat ((depth |> toFloat) /1000.0) ++ "px"]
+            [ "#000000", off, off, String.fromFloat ((depth |> toFloat) / 1000.0) ++ "px" ]
     in
-        style "box-shadow" ( String.join " " shadow)
-       
-        
+    style "box-shadow" (String.join " " shadow)
+
+
+px : Int -> String
+px x =
+    String.fromInt x ++ "px"
+
+
 asHtml : DisplayChar -> Generator (Html Msg)
 asHtml dchar =
     let
-        render color char bg =
+        render color char bg x =
             span
-                [ style "color" (Color.toCssString color)
+                [ style "position" "relative"
+                , style "color" (Color.toCssString color)
                 , style "background-color" (Color.toCssString bg)
                 , style "transform" "skew(39deg)"
                 , style "display" "inline-block"
                 , style "width" "1.5em"
                 , style "height" "1.5em"
-                , shadowStyle char
+                , style "top" (px x)
+                , style "left" (px x)
                 ]
                 [ text (String.fromChar char) ]
     in
@@ -307,10 +315,16 @@ asHtml dchar =
                     [ text " " ]
 
         ColoredChar color char ->
-            Random.constant <| render color char color
+            Random.constant (render color char color)
+                |> RX.andMap (Random.int 0 1)
 
         RndColorChar char ->
-            randomColor |> Random.map (\rndColor -> render Color.white char (rndColor |> setTransperancy 0.9))
+            Random.map2
+                (\rndColor rndOffset ->
+                    render Color.white char (rndColor |> setTransperancy 0.5) rndOffset
+                )
+                randomColor
+                (Random.int 0 10)
 
 
 toString : Evt -> String
@@ -465,8 +479,9 @@ update msg model =
                     case decodeCsv str of
                         Ok lst ->
                             let
-                                _ = Debug.log "gen" lst
-                                    
+                                _ =
+                                    Debug.log "gen" lst
+
                                 gen =
                                     lst |> List.take 300 |> displayEvtsWithoutTime config |> displayLines
                             in
@@ -538,7 +553,7 @@ view model =
             in
             case mCodeHtml of
                 Just codeHtml ->
-                    div [style "background-color" "black"] [ layer "1em" html, layer "1em" codeHtml ]
+                    div [ style "background-color" "black" ] [ layer "1em" html, layer "1em" codeHtml ]
 
                 Nothing ->
                     div [] [ layer "1em" html ]
@@ -546,19 +561,21 @@ view model =
         WrongOrder ->
             text "wrong order"
 
+
+
 {-
-🚲
-bicycle
-Unicode: U+1F6B2, UTF-8: F0 9F 9A B2
+   🚲
+   bicycle
+   Unicode: U+1F6B2, UTF-8: F0 9F 9A B2
 
 
 
-         
-     
-  _     ,_,        
-   \ __ / 
- .-.\  /.-.
-( * )\/( * )
- `-´    `-´
+
+
+     _     ,_,
+      \ __ /
+    .-.\  /.-.
+   ( * )\/( * )
+    `-´    `-´
 
 -}
