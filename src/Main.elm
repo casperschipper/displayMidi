@@ -270,17 +270,14 @@ lineToHtml (Line lst) =
     lst |> List.map asHtml |> RX.sequence
 
 
-shadowStyle : Char -> Html.Attribute Msg
-shadowStyle char =
+shadowStyle : Int -> Html.Attribute Msg
+shadowStyle depth =
     let
-        depth =
-            char |> Char.toCode
-
         off =
-            "5px"
+            px depth
 
         shadow =
-            [ "#000000", off, off, String.fromFloat ((depth |> toFloat) / 1000.0) ++ "px" ]
+            [ "#222222", off, off, px 4 ]
     in
     style "box-shadow" (String.join " " shadow)
 
@@ -298,12 +295,17 @@ asHtml dchar =
                 [ style "position" "relative"
                 , style "color" (Color.toCssString color)
                 , style "background-color" (Color.toCssString bg)
-                , style "transform" "skew(39deg)"
+                , style "transform" "skewX(45deg)"
+                , style "transform" ("rotate(45deg,0deg) perspective(" ++ px (x * 10) ++ ")")
                 , style "display" "inline-block"
-                , style "width" "1.5em"
-                , style "height" "1.5em"
+                , style "width" "8em"
+                , style "height" "8em"
+                , style "margin" "1em"
                 , style "top" (px x)
                 , style "left" (px x)
+                , style "border" "1px solid black"
+                , style "border-radius" "2px"
+                , shadowStyle (x * 10)
                 ]
                 [ text (String.fromChar char) ]
     in
@@ -324,7 +326,7 @@ asHtml dchar =
                     render Color.white char (rndColor |> setTransperancy 0.5) rndOffset
                 )
                 randomColor
-                (Random.int 0 10)
+                (Random.int 8 1025)
 
 
 toString : Evt -> String
@@ -547,14 +549,17 @@ view model =
                         , style "left" "0"
                         , style "font-family" "monospace"
                         , style "font-size" fz
+                        , style "background-color" "#d6faff"
+                        , style "height" "100%"
                         ]
                         [ htmlContent
                         ]
             in
             case mCodeHtml of
                 Just codeHtml ->
-                    div [ style "background-color" "black" ] [ layer "1em" html, layer "1em" codeHtml ]
+                    div [ style "background-color" "black", style "transform" "skewX(45deg)" ] [ layer "1em" html ]
 
+                --, layer "1em" codeHtml ]
                 Nothing ->
                     div [] [ layer "1em" html ]
 
