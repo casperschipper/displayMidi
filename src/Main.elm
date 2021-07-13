@@ -133,6 +133,21 @@ setTransperancy t c =
     Color.rgba color.red color.green color.blue t
 
 
+setDarkness : Float -> Color -> Color
+setDarkness r c =
+    let
+        color =
+            Color.toRgba c
+
+        rt =
+            clamp 0.0 1.0 r
+
+        att val =
+            rt * val
+    in
+    Color.rgb (att color.red) (att color.green) (att color.blue)
+
+
 randomColoredAndChar : Generator ( Color, Char )
 randomColoredAndChar =
     let
@@ -150,7 +165,7 @@ randomColoredAndChar =
 
 randomColor : Generator Color
 randomColor =
-    Random.float 0.1 0.5 |> Random.map (\c -> Color.rgb (c * 0.2) 0.0 (c * 2.0))
+    Random.float 0.1 0.7 |> Random.map (\c -> Color.rgb (c * 0.2) 0.2 (c * 2.0))
 
 
 generatorOfString : String -> Generator Char
@@ -270,14 +285,17 @@ lineToHtml (Line lst) =
     lst |> List.map asHtml |> RX.sequence
 
 
-shadowStyle : Int -> Html.Attribute Msg
-shadowStyle depth =
+shadowStyle : Color -> Int -> Html.Attribute Msg
+shadowStyle clr depth =
     let
         off =
-            px depth
+            px 100
+
+        dark =
+            setTransperancy 0.01 clr
 
         shadow =
-            [ "#222222", off, off, px 4 ]
+            [ Color.toCssString dark, off, off, px 0 ]
     in
     style "box-shadow" (String.join " " shadow)
 
@@ -293,19 +311,28 @@ asHtml dchar =
         render color char bg x =
             span
                 [ style "position" "relative"
-                , style "color" (Color.toCssString color)
-                , style "background-color" (Color.toCssString bg)
-                , style "transform" "skewX(45deg)"
-                , style "transform" ("rotate(45deg,0deg) perspective(" ++ px (x * 10) ++ ")")
+                , style "color" (Color.toCssString (color |> setTransperancy 0.1))
+                , style "background-color" (Color.toCssString (bg |> setTransperancy 0.1))
                 , style "display" "inline-block"
-                , style "width" "8em"
-                , style "height" "8em"
+                , style "width" ".1em"
+                , style "height" ".1em"
+                , style "padding" "1em"
                 , style "margin" "1em"
-                , style "top" (px x)
-                , style "left" (px x)
-                , style "border" "1px solid black"
-                , style "border-radius" "2px"
-                , shadowStyle (x * 10)
+
+                -- , style "border" "1px solid black"
+                , style "border-radius" "1px"
+                , style "font-size" "2em"
+                , shadowStyle color 50
+                ]
+                [ text (String.fromChar char) ]
+
+        renderWater color char bg x =
+            span
+                [ style "font-size" "7em"
+                , style "position" "relative"
+                , style "color" (Color.toCssString (color |> setTransperancy 0.5))
+                , style "background-color" (Color.toCssString (bg |> setTransperancy 0.5))
+                , style "display" "inline-block"
                 ]
                 [ text (String.fromChar char) ]
     in
@@ -318,12 +345,12 @@ asHtml dchar =
 
         ColoredChar color char ->
             Random.constant (render color char color)
-                |> RX.andMap (Random.int 0 1)
+                |> RX.andMap (Random.int 0 10)
 
         RndColorChar char ->
             Random.map2
                 (\rndColor rndOffset ->
-                    render Color.white char (rndColor |> setTransperancy 0.5) rndOffset
+                    renderWater rndColor char (rndColor |> setTransperancy 0.5) rndOffset
                 )
                 randomColor
                 (Random.int 8 1025)
@@ -519,6 +546,11 @@ update msg model =
                     ( Failed e, Cmd.none )
 
 
+blur : Int -> String
+blur p =
+    "blur(" ++ String.fromInt p ++ "px)"
+
+
 view : Model -> Html Msg
 view model =
     case model of
@@ -542,29 +574,44 @@ view model =
 
         Generated ( html, mCodeHtml ) ->
             let
-                layer fz htmlContent =
+                layer fz htmlContent z blr skew =
                     pre
                         [ style "position" "absolute"
                         , style "top" "0"
                         , style "left" "0"
                         , style "font-family" "monospace"
                         , style "font-size" fz
-                        , style "background-color" "#d6faff"
                         , style "height" "100%"
+                        , style "z-index" (String.fromInt z)
+                        , style "filter" (blur blr)
+                        , style "transform" <| "skewX(" ++ String.fromInt skew ++ "deg)"
                         ]
                         [ htmlContent
                         ]
             in
             case mCodeHtml of
                 Just codeHtml ->
-                    div [ style "background-color" "black", style "transform" "skewX(45deg)" ] [ layer "1em" html ]
+                    div [ style "background-color" "black" ]
+                        (List.map (\ang -> layer "1em" html 2 0 ang) (angles 8))
 
-                --, layer "1em" codeHtml ]
                 Nothing ->
-                    div [] [ layer "1em" html ]
+                    div [] [ layer "1em" html 0 0 60 ]
 
         WrongOrder ->
             text "wrong order"
+
+
+angles : Int -> List Int
+angles n =
+    let
+        f ( cnt, x ) =
+            if cnt > n then
+                Nothing
+
+            else
+                Just ( x, ( cnt + 1, x + 5 ) )
+    in
+    LE.unfoldr f ( 0, 10 )
 
 
 
@@ -580,7 +627,7 @@ view model =
      _     ,_,
       \ __ /
     .-.\  /.-.
-   ( * )\/( * )
+   ( *==§'( * )
     `-´    `-´
 
 -}
